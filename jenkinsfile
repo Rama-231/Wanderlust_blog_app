@@ -1,0 +1,73 @@
+ pipeline {
+    agent any
+    environment {
+        SONAR_HOME = tool "sonar"                                   //change tool, see in jenkins tools
+        OWASP_HOME = '/opt/dependency-check'
+    }
+    stages {
+        stage("Clone the Code") {
+            steps {
+                git url: "https://github.com/Rama-231/Wanderlust_blog_app.git", branch: "main"    //change to wanderlust_Blog_app URL
+            }
+        }
+        
+               
+        stage("Docker-compose Build") {
+            steps {
+                sh "sudo docker-compose build"  
+            }
+        }
+        
+        stage('SonarQube Quality Analysis') {
+            steps {
+                withSonarQubeEnv('sonar') {
+                    withCredentials([string(credentialsId: 'sonar', variable: 'SONAR_TOKEN')]) {               //Go to pipeline syntex :-withcredentialsID -->generate variable
+                        sh """
+                            $SONAR_HOME/bin/sonar-scanner \
+                                -Dsonar.projectName=wanderlust \
+                                -Dsonar.projectKey=wanderlust \
+                                -Dsonar.login=$SONAR_TOKEN
+                        """
+                    }
+                }
+            }
+        }
+        
+        stage("OWASP Dependency-Check Vulnerabilities") {
+           steps {
+              dependencyCheck additionalArguments: '--scan ./ --format XML --format HTML --disableYarnAudit --disableNodeAudit', odcInstallation: 'dc'      //change owasp tool name
+              dependencyCheckPublisher pattern: '**/dependency-check-report.xml'
+           }
+        }
+        
+        stage("Trivy File Scan") {
+            steps {
+                sh "trivy fs --format table -o trivy-fs-report.html ."
+            }
+        }
+        
+        stage('Trivy Image Scan') {
+            steps {
+                sh "sudo trivy image --format table -o fs-report-frontend.html wanderlust_blog_app-frontend"      //change image name
+                sh "sudo trivy image --format table -o fs-report-backend.html wanderlust_blog_app-backend"      //change image name
+            }
+   Live Projects Page 11   
+            }
+        }
+        
+         stage("Push to DockerHub") {
+            steps {
+                withCredentials([string(credentialsId: 'docker', variable: 'DOCKER_TOKEN')]) {                                     //Go to pipeline syntex :-withcredentialsID -->generate variable
+                    sh '''    
+                        echo "$DOCKER_TOKEN" | sudo docker login -u 7371908784 --password-stdin                                                                              
+                        sudo docker tag wanderlust_blog_app-frontend  7371908784/wanderlust_blog_app-frontend:latest                     
+                        sudo docker tag wanderlust_blog_app-backend  7371908784/wanderlust_blog_app-backend:latest                       
+                        sudo docker push 7371908784/wanderlust_blog_app-frontend:latest                                                                             
+                        sudo docker push 7371908784/wanderlust_blog_app-backend-:latest                                                                             
+                                                                                                                                           
+                    '''
+                }
+            }
+        }
+    }
+ }
